@@ -1,3 +1,5 @@
+import sys
+sys.path.insert(0, "../../../..")
 from copy import deepcopy
 import itertools
 import numpy as np
@@ -42,10 +44,10 @@ class ReplayBuffer:
 
 
 
-def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
-        steps_per_epoch=4000, epochs=100, replay_size=int(1e6), gamma=0.99, 
-        polyak=0.995, lr=1e-3, alpha=0.2, batch_size=100, start_steps=10000, 
-        update_after=1000, update_every=50, num_test_episodes=10, max_ep_len=1000, 
+def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
+        steps_per_epoch=4000, epochs=5000, replay_size=int(1e6), gamma=0.99,
+        polyak=0.995, lr=1e-3, alpha=0.2, batch_size=256, start_steps=10000,
+        update_after=1000, update_every=50, num_test_episodes=10,
         logger_kwargs=dict(), save_freq=1):
     """
     Soft Actor-Critic (SAC)
@@ -262,6 +264,7 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 # params, as opposed to "mul" and "add", which would make new tensors.
                 p_targ.data.mul_(polyak)
                 p_targ.data.add_((1 - polyak) * p.data)
+        return {"loss_q": loss_q.item(), "loss_pi": loss_pi.item()}
 
     def get_action(o, deterministic=False):
         return ac.act(torch.as_tensor(o, dtype=torch.float32), 
@@ -270,18 +273,22 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     def test_agent():
         for j in range(num_test_episodes):
             o, d, ep_ret, ep_len = test_env.reset(), False, 0, 0
-            while not(d or (ep_len == max_ep_len)):
+            while not(d or (ep_len == env._max_episode_steps)):
                 # Take deterministic actions at test time 
                 o, r, d, _ = test_env.step(get_action(o, True))
                 ep_ret += r
                 ep_len += 1
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
+            print("The test states are:\n", np.r_[o[:40]*100, o[-1]])
 
     # Prepare for interaction with environment
     total_steps = steps_per_epoch * epochs
     start_time = time.time()
     o, ep_ret, ep_len = env.reset(), 0, 0
-
+    # add initialization of episode
+    episode = 0
+    episode_list = []
+    episode_reward = 0
     # Main loop: collect experience in env and update/log each epoch
     for t in range(total_steps):
         
@@ -291,17 +298,19 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         if t > start_steps:
             a = get_action(o)
         else:
-            a = env.action_space.sample()
+            a = env.scale_action(env.action_space.sample())
 
         # Step the env
         o2, r, d, _ = env.step(a)
         ep_ret += r
         ep_len += 1
 
+        # add episode_reward
+        episode_reward += r
         # Ignore the "done" signal if it comes from hitting the time
         # horizon (that is, when it's an artificial terminal signal
         # that isn't based on the agent's state)
-        d = False if ep_len==max_ep_len else d
+        d = False if ep_len==env._max_episode_steps else d
 
         # Store experience to replay buffer
         replay_buffer.store(o, a, r, o2, d)
@@ -311,15 +320,26 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         o = o2
 
         # End of trajectory handling
-        if d or (ep_len == max_ep_len):
+        if d or (ep_len == env._max_episode_steps):
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             o, ep_ret, ep_len = env.reset(), 0, 0
+
+            # add episode reward and tensorflow logger
+            episode += 1
+            episode_list.append(episode_reward)
+            average_reward = np.mean(episode_list[-100:])
+            logger.write("reward/average_reward", average_reward, episode)
+            episode_reward = 0
+
 
         # Update handling
         if t >= update_after and t % update_every == 0:
             for j in range(update_every):
                 batch = replay_buffer.sample_batch(batch_size)
-                update(data=batch)
+                info = update(data=batch)
+                # record loss to tensorboard
+                for k, v in info.items():
+                    logger.write("loss/%s"%(k), v, t)
 
         # End of epoch handling
         if (t+1) % steps_per_epoch == 0:
@@ -329,6 +349,7 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             if (epoch % save_freq == 0) or (epoch == epochs):
                 logger.save_state({'env': env}, None)
 
+            print("The training states are:\n", np.r_[o[:40]*100, o[-1]])
             # Test the performance of the deterministic version of the agent.
             test_agent()
 
@@ -350,13 +371,14 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', type=str, default='HalfCheetah-v2')
+    parser.add_argument('--env', type=str, default='forge:Forge-v0')
     parser.add_argument('--hid', type=int, default=256)
     parser.add_argument('--l', type=int, default=2)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--seed', '-s', type=int, default=0)
-    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--epochs', type=int, default=5000)
     parser.add_argument('--exp_name', type=str, default='sac')
+    parser.add_argument('--batch_size', type=int, default=256)
     args = parser.parse_args()
 
     from spinup.utils.run_utils import setup_logger_kwargs
@@ -366,5 +388,5 @@ if __name__ == '__main__':
 
     sac(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), 
-        gamma=args.gamma, seed=args.seed, epochs=args.epochs,
+        gamma=args.gamma, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size,
         logger_kwargs=logger_kwargs)

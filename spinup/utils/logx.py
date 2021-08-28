@@ -15,6 +15,7 @@ import os.path as osp, time, atexit, os
 import warnings
 from spinup.utils.mpi_tools import proc_id, mpi_statistics_scalar
 from spinup.utils.serialization_utils import convert_json
+from torch.utils.tensorboard import SummaryWriter
 
 color2num = dict(
     gray=30,
@@ -111,6 +112,10 @@ class Logger:
         self.log_headers = []
         self.log_current_row = {}
         self.exp_name = exp_name
+        self.writer = SummaryWriter(osp.join(output_dir, "tb_log"))
+
+    def write(self, name, value, index):
+        self.writer.add_scalar(name, value, index)
 
     def log(self, msg, color='green'):
         """Print a colorized message to stdout."""
