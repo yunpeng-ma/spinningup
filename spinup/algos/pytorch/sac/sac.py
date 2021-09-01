@@ -279,7 +279,7 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 ep_ret += r
                 ep_len += 1
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
-            print("The test states are:\n", np.r_[o[:40]*100, o[-1]])
+            print("The test states are:\n", np.r_[o[:40]*100, o[-2:]])
 
     # Prepare for interaction with environment
     total_steps = steps_per_epoch * epochs
@@ -322,7 +322,7 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         # End of trajectory handling
         if d or (ep_len == env._max_episode_steps):
             logger.store(EpRet=ep_ret, EpLen=ep_len)
-            print("The training states are:\n", np.r_[o[:40]*100, o[-2,-1]])
+            print("The training states are:\n", np.r_[o[:40]*100, o[-2:]])
             o, ep_ret, ep_len = env.reset(), 0, 0
 
             # add episode reward and tensorflow logger
