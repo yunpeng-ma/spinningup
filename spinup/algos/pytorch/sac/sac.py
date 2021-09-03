@@ -48,7 +48,7 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         steps_per_epoch=4000, epochs=5000, replay_size=int(1e6), gamma=0.99,
         polyak=0.995, lr=1e-3, alpha=0.2, batch_size=256, start_steps=10000,
         update_after=1000, update_every=50, num_test_episodes=10,
-        logger_kwargs=dict(), save_freq=1):
+        logger_kwargs=dict(), save_freq=1, w=False):
     """
     Soft Actor-Critic (SAC)
 
@@ -145,7 +145,9 @@ def sac(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             the current policy and value function.
 
     """
-
+    if w:
+        wandb.login()
+        wandb.init(sync_tensorboard=True, name='normal_production', project="sac")
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
 
@@ -379,6 +381,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=5000)
     parser.add_argument('--exp_name', type=str, default='sac')
     parser.add_argument('--batch_size', type=int, default=256)
+    parser.add_argument('--wandb', type=bool, default=True)
     args = parser.parse_args()
 
     from spinup.utils.run_utils import setup_logger_kwargs
@@ -389,4 +392,4 @@ if __name__ == '__main__':
     sac(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), 
         gamma=args.gamma, seed=args.seed, epochs=args.epochs, batch_size=args.batch_size,
-        logger_kwargs=logger_kwargs)
+        logger_kwargs=logger_kwargs, w=args.wandb)
