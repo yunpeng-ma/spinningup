@@ -313,7 +313,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             # Update obs (critical!)
             o = next_o
 
-            timeout = ep_len == evn._max_episode_steps
+            timeout = ep_len == env._max_episode_steps
             terminal = d or timeout
             epoch_ended = t==local_steps_per_epoch-1
 
