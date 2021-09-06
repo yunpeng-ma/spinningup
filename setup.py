@@ -28,7 +28,10 @@ setup(
         'seaborn==0.8.1',
         'tensorflow>=1.8.0,<2.0',
         'torch==1.3.1',
-        'tqdm'
+        'tqdm',
+        'wandb',
+        'pygame'
+
     ],
     description="Teaching tools for introducing people to deep RL.",
     author="Joshua Achiam",

@@ -88,6 +88,8 @@ class MLPGaussianActor(Actor):
     def _distribution(self, obs):
         mu = self.mu_net(obs)
         std = torch.exp(self.log_std)
+        dis = Normal(mu, std)
+        # print(mu)
         return Normal(mu, std)
 
     def _log_prob_from_distribution(self, pi, act):
@@ -101,12 +103,13 @@ class MLPCritic(nn.Module):
         self.v_net = mlp([obs_dim] + list(hidden_sizes) + [1], activation)
 
     def forward(self, obs):
-        return torch.squeeze(self.v_net(obs), -1) # Critical to ensure v has right shape.
+        v= self.v_net(obs)
+        # print(v)
+        return torch.squeeze(v, -1) # Critical to ensure v has right shape.
 
 
 
 class MLPActorCritic(nn.Module):
-
 
     def __init__(self, observation_space, action_space, 
                  hidden_sizes=(64,64), activation=nn.Tanh):

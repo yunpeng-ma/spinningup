@@ -112,10 +112,13 @@ class Logger:
         self.log_headers = []
         self.log_current_row = {}
         self.exp_name = exp_name
-        self.writer = SummaryWriter(osp.join(output_dir, "tb_log"))
+        self.writer = SummaryWriter(osp.join(self.output_dir, "tb_log"))
 
     def write(self, name, value, index):
         self.writer.add_scalar(name, value, index)
+
+    def histogram(self, name, value, index):
+        self.writer.add_histogram(name, value, index)
 
     def log(self, msg, color='green'):
         """Print a colorized message to stdout."""

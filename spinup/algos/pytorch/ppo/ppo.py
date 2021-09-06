@@ -8,7 +8,6 @@ from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 
-
 class PPOBuffer:
     """
     A buffer for storing trajectories experienced by a PPO agent interacting
@@ -86,9 +85,9 @@ class PPOBuffer:
 
 
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
-        steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
-        vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
-        target_kl=0.01, logger_kwargs=dict(), save_freq=10):
+        steps_per_epoch=4000, epochs=5000, gamma=0.99, clip_ratio=0.2, pi_lr=3e-5,
+        vf_lr=1e-4, train_pi_iters=80, train_v_iters=80, lam=0.97,
+        target_kl=0.01, logger_kwargs=dict(), save_freq=10, w=False):
     """
     Proximal Policy Optimization (by clipping), 
 
@@ -191,7 +190,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             the current policy and value function.
 
     """
-
+    if w:
+        wandb.login()
+        wandb.init(sync_tensorboard=True, name='normal_production', project="ppo")
     # Special function to avoid certain slowdowns from PyTorch + MPI combo.
     setup_pytorch_for_mpi()
 
@@ -211,7 +212,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Create actor-critic module
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
-
+    print(ac)
     # Sync params across processes
     sync_params(ac)
 
@@ -289,6 +290,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                      KL=kl, Entropy=ent, ClipFrac=cf,
                      DeltaLossPi=(loss_pi.item() - pi_l_old),
                      DeltaLossV=(loss_v.item() - v_l_old))
+        return {"pi": loss_pi.item(), "v": loss_v.item()}
 
     # Prepare for interaction with environment
     start_time = time.time()
@@ -298,7 +300,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch):
             a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
-
+            logger.histogram('network_output/action', a, t*epoch)
+            logger.histogram('network_output/value', v, t*epoch)
             next_o, r, d, _ = env.step(a)
             ep_ret += r
             ep_len += 1
@@ -310,7 +313,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             # Update obs (critical!)
             o = next_o
 
-            timeout = ep_len == max_ep_len
+            timeout = ep_len == evn._max_episode_steps
             terminal = d or timeout
             epoch_ended = t==local_steps_per_epoch-1
 
@@ -326,6 +329,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
+                    print("The training states are:\n", np.r_[o[:40]*100, o[-2:]])
+                    logger.write("reward/epoch reward", ep_ret, t*epoch)
                 o, ep_ret, ep_len = env.reset(), 0, 0
 
 
@@ -334,7 +339,10 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             logger.save_state({'env': env}, None)
 
         # Perform PPO update!
-        update()
+        info = update()
+        # record loss to tensorboard
+        for k, v in info.items():
+            logger.write("loss/%s"%(k), v, epoch)
 
         # Log info about epoch
         logger.log_tabular('Epoch', epoch)
@@ -356,14 +364,14 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', type=str, default='HalfCheetah-v2')
-    parser.add_argument('--hid', type=int, default=64)
+    parser.add_argument('--env', type=str, default='forge:Forge-v0')
+    parser.add_argument('--hid', type=int, default=256)
     parser.add_argument('--l', type=int, default=2)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--cpu', type=int, default=4)
     parser.add_argument('--steps', type=int, default=4000)
-    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--epochs', type=int, default=5000)
     parser.add_argument('--exp_name', type=str, default='ppo')
     args = parser.parse_args()
 
@@ -375,4 +383,4 @@ if __name__ == '__main__':
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
         seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-        logger_kwargs=logger_kwargs)
+        logger_kwargs=logger_kwargs, w=False)
