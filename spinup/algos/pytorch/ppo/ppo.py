@@ -88,8 +88,8 @@ class PPOBuffer:
 
 
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
-        steps_per_epoch=4000, epochs=5000, gamma=0.99, clip_ratio=0.2, pi_lr=3e-5,
-        vf_lr=1e-4, train_pi_iters=80, train_v_iters=80, lam=0.97,
+        steps_per_epoch=4000, epochs=5000, gamma=0.99, clip_ratio=0.2, pi_lr=1.5e-4,
+        vf_lr=5e-4, train_pi_iters=80, train_v_iters=80, lam=0.97,
         target_kl=0.01, logger_kwargs=dict(), save_freq=10, w=False):
     """
     Proximal Policy Optimization (by clipping), 
