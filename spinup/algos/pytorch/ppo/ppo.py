@@ -303,8 +303,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch):
             a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
-            logger.histogram('network_output/action', a, t*epoch)
-            logger.histogram('network_output/value', v, t*epoch)
+            logger.histogram('network_output/action', a, (t+1)*(epoch+1))
+            logger.histogram('network_output/value', v, (t+1)*(epoch+1))
             next_o, r, d, _ = env.step(a)
             ep_ret += r
             ep_len += 1
@@ -333,7 +333,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
                     print("The training states are:\n", np.r_[o[:40]*100, o[-2:]])
-                    logger.write("reward/epoch reward", ep_ret, t*epoch)
+                    logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
                 o, ep_ret, ep_len = env.reset(), 0, 0
 
 
