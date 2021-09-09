@@ -193,9 +193,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             the current policy and value function.
 
     """
-    if w:
-        wandb.login()
-        wandb.init(sync_tensorboard=True, name='normal_production', project="ppo")
+
     # Special function to avoid certain slowdowns from PyTorch + MPI combo.
     setup_pytorch_for_mpi()
 
@@ -303,8 +301,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch):
             a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
-            logger.histogram('network_output/action', a, (t+1)*(epoch+1))
-            logger.histogram('network_output/value', v, (t+1)*(epoch+1))
+            # logger.histogram('network_output/action', a, (t+1)*(epoch+1))
+            # logger.histogram('network_output/value', v, (t+1)*(epoch+1))
             next_o, r, d, _ = env.step(a)
             ep_ret += r
             ep_len += 1
@@ -333,7 +331,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
                     print("The training states are:\n", np.r_[o[:40]*100, o[-2:]])
-                    logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
+                    if w:
+                        wandb.log({"reward/epoch reward": ep_ret})
+                    # logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
                 o, ep_ret, ep_len = env.reset(), 0, 0
 
 
@@ -344,8 +344,10 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         # Perform PPO update!
         info = update()
         # record loss to tensorboard
-        for k, v in info.items():
-            logger.write("loss/%s"%(k), v, epoch)
+        if w:
+            wandb.log(info)
+        # for k, v in info.items():
+            # logger.write("loss/%s"%(k), v, epoch)
 
         # Log info about epoch
         logger.log_tabular('Epoch', epoch)
@@ -367,23 +369,29 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', type=str, default='forge:Forge-v0')
-    parser.add_argument('--hid', type=int, default=256)
+    parser.add_argument('--env', type=str, default='forgenormal:forgenormal-v0')
+    parser.add_argument('--hid', type=int, default=64)
     parser.add_argument('--l', type=int, default=2)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--cpu', type=int, default=4)
     parser.add_argument('--steps', type=int, default=4000)
     parser.add_argument('--epochs', type=int, default=5000)
+    parser.add_argument('--clip_ratio', type=float, default=0.2)
+    parser.add_argument('--pi_lr', type=float, default=1e-4)
+    parser.add_argument('--vf_lr', type=float, default=3e-4)
+    parser.add_argument('--lam', type=float, default=0.97)
     parser.add_argument('--exp_name', type=str, default='ppo')
     args = parser.parse_args()
-
     # mpi_fork(args.cpu)  # run parallel code with mpi
-
+    if True:
+        wandb.login()
+        wandb.init(sync_tensorboard=True, config=args, name='normal_production', project="ppo")
     from spinup.utils.run_utils import setup_logger_kwargs
     logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
 
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
-        ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
-        seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-        logger_kwargs=logger_kwargs, w=False)
+        ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma,
+        seed=args.seed, clip_ratio=args.clip_ratio, pi_lr=args.pi_lr,
+        vf_lr=args.pi_lr, lam=args.lam, steps_per_epoch=args.steps,
+        epochs=args.epochs, logger_kwargs=logger_kwargs, w=True)
