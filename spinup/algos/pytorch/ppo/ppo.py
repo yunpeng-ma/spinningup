@@ -390,10 +390,10 @@ if __name__ == '__main__':
         wandb.login()
         wandb.init(sync_tensorboard=True, config=args, name='normal_production', project="ppo")
     from spinup.utils.run_utils import setup_logger_kwargs
-    logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
-
+    logger_kwargs = setup_logger_kwargs(args.exp_name+sys.argv[1]+sys.argv[2], args.seed)
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma,
         seed=args.seed, clip_ratio=args.clip_ratio, pi_lr=args.pi_lr,
         vf_lr=args.pi_lr, lam=args.lam, steps_per_epoch=args.steps,
         epochs=args.epochs, logger_kwargs=logger_kwargs, w=True)
+
