@@ -388,7 +388,7 @@ if __name__ == '__main__':
     # mpi_fork(args.cpu)  # run parallel code with mpi
     if True:
         wandb.login()
-        wandb.init(sync_tensorboard=True, config=args, name='normal_production', project="ppo")
+        wandb.init(sync_tensorboard=True, config=args, name='normal_production'+sys.argv[1]+sys.argv[2], project="ppo")
     from spinup.utils.run_utils import setup_logger_kwargs
     logger_kwargs = setup_logger_kwargs(args.exp_name+sys.argv[1]+sys.argv[2], args.seed)
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
