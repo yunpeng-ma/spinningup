@@ -291,7 +291,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                      KL=kl, Entropy=ent, ClipFrac=cf,
                      DeltaLossPi=(loss_pi.item() - pi_l_old),
                      DeltaLossV=(loss_v.item() - v_l_old))
-        return {"pi": loss_pi.item(), "v": loss_v.item()}
+        return {"loss/pi": loss_pi.item(), "loss/v": loss_v.item()}
 
     # Prepare for interaction with environment
     start_time = time.time()
@@ -330,7 +330,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
-                    print("The training states are:\n", np.r_[o[:40]*100, o[-2:]])
+                    print("The training states are:\n",
+                          np.r_[np.interp(o[:40], [-1, 1], [0, 1300]), np.interp(o[-2], [-1, 1],[0, 24.698]),
+                            np.interp(o[-1], [-1, 1], [0, 716])])
                     if w:
                         wandb.log({"reward/epoch reward": ep_ret})
                     # logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
