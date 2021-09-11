@@ -380,8 +380,8 @@ if __name__ == '__main__':
     parser.add_argument('--steps', type=int, default=4000)
     parser.add_argument('--epochs', type=int, default=5000)
     parser.add_argument('--clip_ratio', type=float, default=0.2)
-    parser.add_argument('--pi_lr', type=float, default=1e-3)
-    parser.add_argument('--vf_lr', type=float, default=3e-4)
+    parser.add_argument('--pi_lr', type=float, default=3e-4)
+    parser.add_argument('--vf_lr', type=float, default=1e-3)
     parser.add_argument('--lam', type=float, default=0.97)
     parser.add_argument('--kl_con', type=float, default=1.0)
     parser.add_argument('--exp_name', type=str, default='ppo')
@@ -395,6 +395,6 @@ if __name__ == '__main__':
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma,
         seed=args.seed, clip_ratio=args.clip_ratio, pi_lr=args.pi_lr,
-        vf_lr=args.pi_lr, lam=args.lam, steps_per_epoch=args.steps,
-        epochs=args.epochs, logger_kwargs=logger_kwargs, kl_con=args.kl_con, w=False)
+        vf_lr=args.vf_lr, lam=args.lam, steps_per_epoch=args.steps,
+        epochs=args.epochs, logger_kwargs=logger_kwargs, kl_con=args.kl_con, w=True)
 
