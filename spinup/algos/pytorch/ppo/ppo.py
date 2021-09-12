@@ -372,29 +372,34 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='forgenormal:forgenormal-v0')
-    parser.add_argument('--hid', type=int, default=64)
+    parser.add_argument('--hid', type=int, default=512)
     parser.add_argument('--l', type=int, default=2)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--cpu', type=int, default=4)
     parser.add_argument('--steps', type=int, default=4000)
     parser.add_argument('--epochs', type=int, default=5000)
-    parser.add_argument('--clip_ratio', type=float, default=0.2)
+    parser.add_argument('--clip_ratio', type=float, default=0.03)
     parser.add_argument('--pi_lr', type=float, default=3e-4)
     parser.add_argument('--vf_lr', type=float, default=1e-3)
     parser.add_argument('--lam', type=float, default=0.97)
-    parser.add_argument('--kl_con', type=float, default=1.0)
+    parser.add_argument('--kl_con', type=float, default=0.5)
     parser.add_argument('--exp_name', type=str, default='ppo')
+    parser.add_argument('--wandb_log', type=bool, default=False)
     args = parser.parse_args()
     # mpi_fork(args.cpu)  # run parallel code with mpi
-    if True:
+    test_name = 'normal'
+    if len(sys.argv) > 1:
+        for a in sys.argv[1:]:
+            test_name = test_name + a
+    if args.wandb_log:
         wandb.login()
-        wandb.init(sync_tensorboard=True, config=args, name='normal_production'+sys.argv[1]+sys.argv[2]+sys.argv[3], project="ppo")
+        wandb.init(sync_tensorboard=True, config=args, name=test_name, project="ppo")
     from spinup.utils.run_utils import setup_logger_kwargs
-    logger_kwargs = setup_logger_kwargs(args.exp_name+sys.argv[1]+sys.argv[2]+sys.argv[3], args.seed)
+    logger_kwargs = setup_logger_kwargs(args.exp_name+test_name, args.seed)
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma,
         seed=args.seed, clip_ratio=args.clip_ratio, pi_lr=args.pi_lr,
         vf_lr=args.vf_lr, lam=args.lam, steps_per_epoch=args.steps,
-        epochs=args.epochs, logger_kwargs=logger_kwargs, kl_con=args.kl_con, w=True)
+        epochs=args.epochs, logger_kwargs=logger_kwargs, kl_con=args.kl_con, w=args.wandb_log)
 
