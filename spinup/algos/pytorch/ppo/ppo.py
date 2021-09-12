@@ -379,7 +379,7 @@ if __name__ == '__main__':
     parser.add_argument('--cpu', type=int, default=4)
     parser.add_argument('--steps', type=int, default=4000)
     parser.add_argument('--epochs', type=int, default=5000)
-    parser.add_argument('--clip_ratio', type=float, default=0.2)
+    parser.add_argument('--clip_ratio', type=float, default=0.03)
     parser.add_argument('--pi_lr', type=float, default=3e-4)
     parser.add_argument('--vf_lr', type=float, default=1e-3)
     parser.add_argument('--lam', type=float, default=0.97)
