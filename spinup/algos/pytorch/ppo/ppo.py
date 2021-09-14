@@ -332,7 +332,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
                     print("The training states are:\n",
                           np.r_[np.interp(o[:40], [-1, 1], [0, 1300]), np.interp(o[-2], [-1, 1],[0, 24.698]),
-                            np.interp(o[-1], [-1, 1], [0, 821])])
+                            np.interp(o[-1], [-1, 1], [0, 1069])])
                     if w:
                         wandb.log({"reward/epoch reward": ep_ret})
                     # logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
@@ -385,7 +385,7 @@ if __name__ == '__main__':
     parser.add_argument('--lam', type=float, default=0.97)
     parser.add_argument('--kl_con', type=float, default=0.5)
     parser.add_argument('--exp_name', type=str, default='ppo')
-    parser.add_argument('--wandb_log', type=bool, default=False)
+    parser.add_argument('--wandb_log', type=bool, default=True)
     args = parser.parse_args()
     # mpi_fork(args.cpu)  # run parallel code with mpi
     test_name = 'warm_holding'
