@@ -10,6 +10,7 @@ from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 import wandb
+import datetime
 
 class PPOBuffer:
     """
@@ -332,7 +333,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
                     print("The training states are:\n",
                           np.r_[np.interp(o[:40], [-1, 1], [0, 1300]), np.interp(o[-2], [-1, 1],[0, 24.698]),
-                            np.interp(o[-1], [-1, 1], [0, 1069])])
+                            np.interp(o[-1], [-1, 1], [0, 667])])
                     if w:
                         wandb.log({"reward/epoch reward": ep_ret})
                     # logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
@@ -388,7 +389,8 @@ if __name__ == '__main__':
     parser.add_argument('--wandb_log', type=bool, default=True)
     args = parser.parse_args()
     # mpi_fork(args.cpu)  # run parallel code with mpi
-    test_name = 'warm_holding'
+    date_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    test_name = 'warm_holding'+date_str
     if len(sys.argv) > 1:
         for a in sys.argv[1:]:
             test_name = test_name + a
