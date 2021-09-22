@@ -7,11 +7,11 @@ import torch.nn as nn
 from torch.distributions.normal import Normal
 from torch.distributions.categorical import Categorical
 
-# Initialize Policy weights
-def weights_init_(m):
-    if isinstance(m, nn.Linear):
-        torch.nn.init.xavier_uniform_(m.weight, gain=1)
-        torch.nn.init.constant_(m.bias, 0)
+# # Initialize Policy weights
+# def weights_init_(m):
+#     if isinstance(m, nn.Linear):
+#         torch.nn.init.xavier_uniform_(m.weight, gain=1)
+#         torch.nn.init.constant_(m.bias, 0)
 
 def combined_shape(length, shape=None):
     if shape is None:
@@ -90,7 +90,7 @@ class MLPGaussianActor(Actor):
         log_std = -0.5 * np.ones(act_dim, dtype=np.float32)
         self.log_std = torch.nn.Parameter(torch.as_tensor(log_std))
         self.mu_net = mlp([obs_dim] + list(hidden_sizes) + [act_dim], activation)
-        self.apply(weights_init_)
+        # self.apply(weights_init_)
 
     def _distribution(self, obs):
         mu = self.mu_net(obs)
@@ -108,13 +108,12 @@ class MLPCritic(nn.Module):
     def __init__(self, obs_dim, hidden_sizes, activation):
         super().__init__()
         self.v_net = mlp([obs_dim] + list(hidden_sizes) + [1], activation)
-        self.apply(weights_init_)
+        # self.apply(weights_init_)
 
     def forward(self, obs):
         v= self.v_net(obs)
         # print(v)
         return torch.squeeze(v, -1) # Critical to ensure v has right shape.
-
 
 
 class MLPActorCritic(nn.Module):
