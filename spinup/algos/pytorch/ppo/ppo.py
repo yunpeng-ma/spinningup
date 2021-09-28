@@ -332,7 +332,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
                     print("The training states are:\n",
-                          np.r_[np.interp(o[:40], [-1, 1], [0, 1300]), np.interp(o[-2], [-1, 1],[0, 24.698]),
+                          np.r_[np.interp(o[:100], [-1, 1], [0, 1300]), np.interp(o[-3:-1], [-1, 1],[0, 24.698]),
                             np.interp(o[-1], [-1, 1], [0, 1117])])
                     if w:
                         wandb.log({"reward/epoch reward": ep_ret})
@@ -372,7 +372,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', type=str, default='forgewh:forgewh-v1')
+    parser.add_argument('--env', type=str, default='forgewh20m:forgewh-v1')
     parser.add_argument('--hid', type=int, default=512)
     parser.add_argument('--l', type=int, default=2)
     parser.add_argument('--gamma', type=float, default=0.99)
