@@ -333,7 +333,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
                     print("The training states are:\n",
                           np.r_[np.interp(o[:40], [-1, 1], [0, 1300]), np.interp(o[-2], [-1, 1],[0, 24.698]),
-                            np.interp(o[-1], [-1, 1], [0, 741])])
+                            np.interp(o[-1], [-1, 1], [0, 1117])])
                     if w:
                         wandb.log({"reward/epoch reward": ep_ret})
                     # logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
@@ -390,13 +390,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # mpi_fork(args.cpu)  # run parallel code with mpi
     date_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    test_name = 'warm_holding'+date_str
+    test_name = 'wh_20m_'+date_str
     if len(sys.argv) > 1:
         for a in sys.argv[1:]:
             test_name = test_name + a
     if args.wandb_log:
         wandb.login()
-        wandb.init(sync_tensorboard=True, config=args, name=test_name, project="ppo")
+        wandb.init(sync_tensorboard=True, config=args, name=test_name, project="smart_forge")
     from spinup.utils.run_utils import setup_logger_kwargs
     logger_kwargs = setup_logger_kwargs(args.exp_name+test_name, args.seed)
     ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
