@@ -333,7 +333,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
                     print("The training states are:\n",
                           np.r_[np.interp(o[:100], [-1, 1], [0, 1300]), np.interp(o[-3:-1], [-1, 1],[0, 24.698]),
-                            np.interp(o[-1], [-1, 1], [0, 1117])])
+                            np.interp(o[-1], [-1, 1], [0, 1156])])
                     if w:
                         wandb.log({"reward/epoch reward": ep_ret})
                     # logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
