@@ -331,9 +331,11 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
-                    print("The training states are:\n",
-                          np.r_[np.interp(o[:50], [-1, 1], [0, 1300]), np.interp(o[-3:-1], [-1, 1],[0, 24.698]),
-                            np.interp(o[-1], [-1, 1], [0, 1156])])
+                    result = np.r_[np.interp(o[:50], [-1, 1], [0, 1300]),
+                                   np.interp(o[-3], [-1, 1],[0, 24.698]),
+                                   np.interp(o[-2], [-1, 1], [0, 1156]),
+                                    o[-1] * 0.04]
+                    print("The temperature, position, time and speed are: \n", result)
                     if w:
                         wandb.log({"reward/epoch reward": ep_ret})
                     # logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
@@ -373,14 +375,14 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='forgewh20m:forgewh-v1')
-    parser.add_argument('--hid', type=int, default=512)
+    parser.add_argument('--hid', type=int, default=128)
     parser.add_argument('--l', type=int, default=2)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--cpu', type=int, default=4)
     parser.add_argument('--steps', type=int, default=4000)
     parser.add_argument('--epochs', type=int, default=5000)
-    parser.add_argument('--clip_ratio', type=float, default=0.03)
+    parser.add_argument('--clip_ratio', type=float, default=0.1)
     parser.add_argument('--pi_lr', type=float, default=3e-4)
     parser.add_argument('--vf_lr', type=float, default=1e-3)
     parser.add_argument('--lam', type=float, default=0.97)
@@ -390,7 +392,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # mpi_fork(args.cpu)  # run parallel code with mpi
     date_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    test_name = 'wh_20m_'+date_str
+    test_name = 'wh_20m_partial_obs'+date_str
     if len(sys.argv) > 1:
         for a in sys.argv[1:]:
             test_name = test_name + a
