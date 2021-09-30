@@ -335,7 +335,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                                    np.interp(o[-3], [-1, 1],[0, 24.698]),
                                    np.interp(o[-2], [-1, 1], [0, 1156]),
                                     o[-1] * 0.04]
-                    print("The temperature, position, time and speed are: \n", result)
+                    print("The temperature, position, time and speed are: \n", [np.round(x, 3) for x in result])
                     if w:
                         wandb.log({"reward/epoch reward": ep_ret})
                     # logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
