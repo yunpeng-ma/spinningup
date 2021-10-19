@@ -331,9 +331,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
-                    result = np.r_[np.interp(o[:100], [-1, 1], [800, 1300]),
+                    result = np.r_[np.interp(o[:250], [-1, 1], [800, 1300]),
                                    np.interp(o[-3], [-1, 1],[0, 24.698]),
-                                   np.interp(o[-2], [-1, 1], [0, 1132]),
+                                   np.interp(o[-2], [-1, 1], [0, 1207]),
                                     o[-1] * 0.04]
                     print("The temperature, position, time and speed are: \n", [np.round(x, 3) for x in result])
                     if w:
@@ -392,7 +392,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # mpi_fork(args.cpu)  # run parallel code with mpi
     date_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    test_name = 'wh_21m_real_setting'+date_str
+    test_name = 'wh_25m_real_setting_with_max_step'+date_str
     if len(sys.argv) > 1:
         for a in sys.argv[1:]:
             test_name = test_name + a

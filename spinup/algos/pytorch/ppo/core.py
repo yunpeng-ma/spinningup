@@ -95,8 +95,6 @@ class MLPGaussianActor(Actor):
     def _distribution(self, obs):
         mu = self.mu_net(obs)
         std = torch.exp(self.log_std)
-        dis = Normal(mu, std)
-        # print(mu)
         return Normal(mu, std)
 
     def _log_prob_from_distribution(self, pi, act):
