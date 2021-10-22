@@ -333,7 +333,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
                     result = np.r_[np.interp(o[:250], [-1, 1], [800, 1300]),
                                    np.interp(o[-3], [-1, 1],[0, 24.698]),
-                                   np.interp(o[-2], [-1, 1], [0, 1207]),
+                                   np.interp(o[-2], [-1, 1], [0, 1199]),
                                     o[-1] * 0.04]
                     print("The temperature, position, time and speed are: \n", [np.round(x, 3) for x in result])
                     if w:
