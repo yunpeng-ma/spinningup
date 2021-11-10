@@ -5,7 +5,7 @@ import torch
 from torch.optim import Adam
 import gym
 import time
-import spinup.algos.pytorch.ppo.core as core
+import spinup.algos.pytorch.ppo.core_cell_lstm as core_lstm
 from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
@@ -19,18 +19,26 @@ class PPOBuffer:
     for calculating the advantages of state-action pairs.
     """
 
-    def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
-        self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
+    def __init__(self, obs_dim, act_dim, size, hidden, gamma=0.99, lam=0.95):
+        self.obs_buf = np.zeros(core_lstm.combined_shape(size, obs_dim), dtype=np.float32)
+        self.act_buf = np.zeros(core_lstm.combined_shape(size, act_dim), dtype=np.float32)
         self.adv_buf = np.zeros(size, dtype=np.float32)
         self.rew_buf = np.zeros(size, dtype=np.float32)
         self.ret_buf = np.zeros(size, dtype=np.float32)
         self.val_buf = np.zeros(size, dtype=np.float32)
         self.logp_buf = np.zeros(size, dtype=np.float32)
+        self.h_pi_in = np.zeros(core_lstm.combined_shape(size, hidden), dtype=np.float32)
+        self.c_pi_in = np.zeros(core_lstm.combined_shape(size, hidden), dtype=np.float32)
+        self.h_pi_out = np.zeros(core_lstm.combined_shape(size, hidden), dtype=np.float32)
+        self.c_pi_out = np.zeros(core_lstm.combined_shape(size, hidden), dtype=np.float32)
+        self.h_v_in = np.zeros(core_lstm.combined_shape(size, hidden), dtype=np.float32)
+        self.c_v_in = np.zeros(core_lstm.combined_shape(size, hidden), dtype=np.float32)
+        self.h_v_out = np.zeros(core_lstm.combined_shape(size, hidden), dtype=np.float32)
+        self.c_v_out = np.zeros(core_lstm.combined_shape(size, hidden), dtype=np.float32)
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
 
-    def store(self, obs, act, rew, val, logp):
+    def store(self, obs, act, rew, val, logp, h_pi_in, h_pi_out, h_v_in, h_v_out):
         """
         Append one timestep of agent-environment interaction to the buffer.
         """
@@ -40,6 +48,14 @@ class PPOBuffer:
         self.rew_buf[self.ptr] = rew
         self.val_buf[self.ptr] = val
         self.logp_buf[self.ptr] = logp
+        self.h_pi_in[self.ptr] = h_pi_in[0]
+        self.c_pi_in[self.ptr] = h_pi_in[1]
+        self.h_pi_out[self.ptr] = h_pi_out[0]
+        self.c_pi_out[self.ptr] = h_pi_out[1]
+        self.h_v_in[self.ptr] = h_v_in[0]
+        self.c_v_in[self.ptr] = h_v_in[1]
+        self.h_v_out[self.ptr] = h_v_out[0]
+        self.c_v_out[self.ptr] = h_v_out[1]
         self.ptr += 1
 
     def finish_path(self, last_val=0):
@@ -64,10 +80,10 @@ class PPOBuffer:
         
         # the next two lines implement GAE-Lambda advantage calculation
         deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
-        self.adv_buf[path_slice] = core.discount_cumsum(deltas, self.gamma * self.lam)
+        self.adv_buf[path_slice] = core_lstm.discount_cumsum(deltas, self.gamma * self.lam)
         
         # the next line computes rewards-to-go, to be targets for the value function
-        self.ret_buf[path_slice] = core.discount_cumsum(rews, self.gamma)[:-1]
+        self.ret_buf[path_slice] = core_lstm.discount_cumsum(rews, self.gamma)[:-1]
         
         self.path_start_idx = self.ptr
 
@@ -83,11 +99,12 @@ class PPOBuffer:
         adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
-                    adv=self.adv_buf, logp=self.logp_buf)
+                    adv=self.adv_buf, logp=self.logp_buf, h_pi_in=self.h_pi_in,
+                    c_pi_in=self.c_pi_in, h_v_in=self.h_v_in, c_v_in=self.c_v_in)
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
 
 
-def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
+def ppo(env_fn, actor_critic=core_lstm.MLPActorCritic, hidden=64, seed=0,
         steps_per_epoch=4000, epochs=5000, gamma=0.99, clip_ratio=0.2, pi_lr=1.5e-4,
         vf_lr=5e-4, train_pi_iters=80, train_v_iters=80, lam=0.97,
         target_kl=0.01, logger_kwargs=dict(), save_freq=10, kl_con=1.5, w=False):
@@ -212,25 +229,33 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     act_dim = env.action_space.shape
 
     # Create actor-critic module
-    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
+
+    ac = actor_critic(env.observation_space, env.action_space, hidden)
     print(ac)
     # Sync params across processes
     sync_params(ac)
 
     # Count variables
-    var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.v])
+    var_counts = tuple(core_lstm.count_vars(module) for module in [ac.pi, ac.v])
     logger.log('\nNumber of parameters: \t pi: %d, \t v: %d\n'%var_counts)
 
     # Set up experience buffer
-    local_steps_per_epoch = int(steps_per_epoch / num_procs())
-    buf = PPOBuffer(obs_dim, act_dim, local_steps_per_epoch, gamma, lam)
+    T_horizon = 20
+    # local_steps_per_epoch = int(steps_per_epoch / num_procs())
+    buf = PPOBuffer(obs_dim, act_dim, T_horizon, hidden, gamma, lam)
 
     # Set up function for computing PPO policy loss
     def compute_loss_pi(data):
-        obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
+        obs, act, adv, logp_old, h_pi_in, c_pi_in = \
+            data['obs'], data['act'], data['adv'], data['logp'], data['h_pi_in'][0], data['c_pi_in'][0]
+        h_pi_in = torch.as_tensor(np.reshape(h_pi_in, (1, 1, -1)), dtype=torch.float32)
+        c_pi_in = torch.as_tensor(np.reshape(c_pi_in, (1, 1, -1)), dtype=torch.float32)
+        # print('h pi in dimension:', np.shape(h_pi_in))
+        first_hidden = (h_pi_in, c_pi_in)
+        # print('first hidden', first_hidden)
 
         # Policy loss
-        pi, logp = ac.pi(obs, act)
+        pi, logp = ac.pi(obs, act, first_hidden)
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
@@ -246,8 +271,12 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Set up function for computing value loss
     def compute_loss_v(data):
-        obs, ret = data['obs'], data['ret']
-        return ((ac.v(obs) - ret)**2).mean()
+        obs, ret, h_v_in, c_v_in = data['obs'], data['ret'], data['h_v_in'][0], data['c_v_in'][0]
+        h_v_in = torch.as_tensor(np.reshape(h_v_in, (1, 1, -1)), dtype=torch.float32)
+        c_v_in = torch.as_tensor(np.reshape(c_v_in, (1, 1, -1)), dtype=torch.float32)
+        first_hidden = (h_v_in, c_v_in)
+        value, _ = ac.v(obs, first_hidden)
+        return ((value - ret)**2).mean()
 
     # Set up optimizers for policy and value function
     pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
@@ -269,7 +298,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             loss_pi, pi_info = compute_loss_pi(data)
             kl = mpi_avg(pi_info['kl'])
             if kl > kl_con * target_kl:
-                logger.log('Early stopping at step %d due to reaching max kl.'%i)
+                # logger.log('Early stopping at step %d due to reaching max kl.'%i)
 
                 break
             loss_pi.backward()
@@ -296,13 +325,53 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Prepare for interaction with environment
     start_time = time.time()
-    o, ep_ret, ep_len = env.reset(), 0, 0
 
 
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
-        for t in range(local_steps_per_epoch):
-            a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
+        h_pi_out = (torch.zeros([1, 1, args.hid], dtype=torch.float), torch.zeros([1, 1, args.hid], dtype=torch.float))
+        # print('hidden pi out:', h_pi_out)
+        h_v_out = (torch.zeros([1, 1, args.hid], dtype=torch.float), torch.zeros([1, 1, args.hid], dtype=torch.float))
+        done = False
+        o, ep_ret, ep_len = env.reset(), 0, 0
+        # print('obs:', o)
+        while not done:
+            for t in range(T_horizon):
+                # env.render()
+                h_pi_in = h_pi_out
+                # print('hidden pi in:', h_pi_in)
+                h_v_in = h_v_out
+
+                # print('hidden v in:', h_v_in)
+                a, v, logp, h_pi_out, h_v_out = ac.step(torch.as_tensor(o, dtype=torch.float32), h_pi_in, h_pi_out)
+                next_o, r, d, _ = env.step(a)
+                next_o = np.squeeze(next_o)
+                ep_ret += r
+                ep_len += 1
+                # save and log
+                buf.store(o, a, r, v, logp, h_pi_in, h_pi_out, h_v_in, h_v_out)
+                logger.store(VVals=v)
+
+                # Update obs (critical!)
+                o = next_o
+                if done:
+                    break
+            if not done:
+                _, v, _, _, _ = ac.step(torch.as_tensor(o, dtype=torch.float32), h_pi_in, h_pi_out)
+            else:
+                v = 0
+            buf.finish_path(v)
+            info =update()
+        print("The episdoe reward is:", ep_ret)
+        if w:
+            wandb.log({"reward/epoch reward": ep_ret})
+            wandb.log(info)
+        """
+        for t in range(T_horizon):
+            h_pi_in = h_pi_out
+            h_v_in = h_v_out
+            a, v, logp, h_pi_out, h_v_out = ac.step(torch.as_tensor(o, dtype=torch.float32), torch.as_tensor(h_pi_in, dtype=torch.float32),
+                                                    torch.as_tensor(h_v_in, dtype=torch.float32))
             # logger.histogram('network_output/action', a, (t+1)*(epoch+1))
             # logger.histogram('network_output/value', v, (t+1)*(epoch+1))
             next_o, r, d, _ = env.step(a)
@@ -310,7 +379,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             ep_len += 1
 
             # save and log
-            buf.store(o, a, r, v, logp)
+            buf.store(o, a, r, v, logp, h_pi_in, h_pi_out, h_v_in, h_v_out)
             logger.store(VVals=v)
             
             # Update obs (critical!)
@@ -318,7 +387,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
             timeout = ep_len == env._max_episode_steps
             terminal = d or timeout
-            epoch_ended = t==local_steps_per_epoch-1
+            epoch_ended = t==T_horizon-1
 
             if terminal or epoch_ended:
                 if epoch_ended and not(terminal):
@@ -329,6 +398,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 else:
                     v = 0
                 buf.finish_path(v)
+                info = update()
+                if w:
+                    wandb.log(info)
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
@@ -341,17 +413,17 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                         wandb.log({"reward/epoch reward": ep_ret})
                     # logger.write("reward/epoch reward", ep_ret, (t+1)*(epoch+1))
                 o, ep_ret, ep_len = env.reset(), 0, 0
-
+            """
 
         # Save model
         if (epoch % save_freq == 0) or (epoch == epochs-1):
             logger.save_state({'env': env}, None)
 
         # Perform PPO update!
-        info = update()
+        # info = update()
         # record loss to tensorboard
-        if w:
-            wandb.log(info)
+        # if w:
+        #     wandb.log(info)
         # for k, v in info.items():
             # logger.write("loss/%s"%(k), v, epoch)
 
@@ -375,9 +447,9 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', type=str, default='forgewh20m:forgewh-v1')
-    parser.add_argument('--hid', type=int, default=128)
-    parser.add_argument('--l', type=int, default=2)
+    parser.add_argument('--env', type=str, default='MountainCarContinuous-v0')
+    parser.add_argument('--hid', type=int, default=64)
+    parser.add_argument('--l', type=int, default=1)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--cpu', type=int, default=4)
@@ -393,17 +465,17 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # mpi_fork(args.cpu)  # run parallel code with mpi
     date_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    test_name = 'wh_25m_real_setting_with_max_step'+date_str
+    test_name = args.env+date_str
     if len(sys.argv) > 1:
         for a in sys.argv[1:]:
             test_name = test_name + a
     if args.wandb_log:
         wandb.login()
-        wandb.init(sync_tensorboard=True, config=args, name=test_name, project="smart_forge")
+        wandb.init(sync_tensorboard=True, config=args, name=test_name, project="lstm")
     from spinup.utils.run_utils import setup_logger_kwargs
     logger_kwargs = setup_logger_kwargs(args.exp_name+test_name, args.seed)
-    ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
-        ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma,
+    ppo(lambda : gym.make(args.env), actor_critic=core_lstm.MLPActorCritic,
+        hidden=args.hid, gamma=args.gamma,
         seed=args.seed, clip_ratio=args.clip_ratio, pi_lr=args.pi_lr,
         vf_lr=args.pi_lr*0.33, lam=args.lam, steps_per_epoch=args.steps,
         epochs=args.epochs, logger_kwargs=logger_kwargs, kl_con=args.kl_con, w=args.wandb_log)
